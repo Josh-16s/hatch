@@ -1,0 +1,30 @@
+name: Assemble package-lock
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.lock-parts/**'
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble package-lock.json
+        run: |
+          set -euo pipefail
+          expected_sha="517902f572e5f4e821bc840708d4eda2c722306ab01b63bce89551249aabdee7"
+          cat .lock-parts/00 .lock-parts/01 .lock-parts/02 .lock-parts/03 .lock-parts/04 .lock-parts/05 .lock-parts/06 .lock-parts/07 .lock-parts/08 .lock-parts/09 .lock-parts/10 .lock-parts/11 .lock-parts/12 .lock-parts/13 .lock-parts/14 .lock-parts/15 .lock-parts/16 .lock-parts/17 .lock-parts/18 .lock-parts/19 .lock-parts/20 .lock-parts/21 .lock-parts/22 .lock-parts/23 .lock-parts/24 .lock-parts/25 .lock-parts/26 .lock-parts/27 .lock-parts/28 .lock-parts/29 > package-lock.json
+          actual_sha=$(sha256sum package-lock.json | awk '{print $1}')
+          echo "expected=$expected_sha"
+          echo "actual=$actual_sha"
+          test "$actual_sha" = "$expected_sha"
+          rm -rf .lock-parts
+          rm -f .github/workflows/assemble-package-lock.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git add -u .lock-parts .github/workflows/assemble-package-lock.yml
+          git commit -m "Add package-lock.json (exact workspace bytes)"
+          git push

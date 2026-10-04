@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '.lock-parts/**'
+      - '.lock-b64/**'
 permissions:
   contents: write
 jobs:
@@ -14,17 +14,46 @@ jobs:
       - name: Assemble package-lock.json
         run: |
           set -euo pipefail
-          expected_sha="517902f572e5f4e821bc840708d4eda2c722306ab01b63bce89551249aabdee7"
-          cat .lock-parts/00 .lock-parts/01 .lock-parts/02 .lock-parts/03 .lock-parts/04 .lock-parts/05 .lock-parts/06 .lock-parts/07 .lock-parts/08 .lock-parts/09 .lock-parts/10 .lock-parts/11 .lock-parts/12 .lock-parts/13 .lock-parts/14 .lock-parts/15 .lock-parts/16 .lock-parts/17 .lock-parts/18 .lock-parts/19 .lock-parts/20 .lock-parts/21 .lock-parts/22 .lock-parts/23 .lock-parts/24 .lock-parts/25 .lock-parts/26 .lock-parts/27 .lock-parts/28 .lock-parts/29 > package-lock.json
-          actual_sha=$(sha256sum package-lock.json | awk '{print $1}')
-          echo "expected=$expected_sha"
-          echo "actual=$actual_sha"
-          test "$actual_sha" = "$expected_sha"
-          rm -rf .lock-parts
+          expected='517902f572e5f4e821bc840708d4eda2c722306ab01b63bce89551249aabdee7'
+          python3 <<'PY'
+          from pathlib import Path
+          root = Path('.lock-b64')
+          p08 = root / '08'
+          t = p08.read_text()
+          if len(t) > 1530 and t[1530] != '6':
+              p08.write_text(t[:1530] + '6' + t[1531:])
+          p09 = root / '09'
+          t = p09.read_text()
+          if len(t) > 4370 and t[4367:4370] == 'uvw':
+              p09.write_text(t[:4367] + 'bulb' + t[4370:])
+          p18 = root / '18'
+          if p18.exists():
+              t = p18.read_text()
+              if len(t) > 1560 and t[1560] != '9':
+                  p18.write_text(t[:1560] + '9' + t[1561:])
+          parts = sorted(
+              [p for p in root.iterdir() if p.is_file() and p.name.isdigit()],
+              key=lambda p: int(p.name),
+          )
+          data = ''.join(p.read_text().replace('\n', '') for p in parts)
+          Path('/tmp/lock.b64').write_text(data)
+          print('parts', [p.name for p in parts], 'count', len(parts), 'b64_len', len(data))
+          PY
+          python3 <<'PY'
+          import base64, zlib, pathlib, hashlib
+          b64 = pathlib.Path('/tmp/lock.b64').read_text()
+          raw = zlib.decompress(base64.b64decode(b64))
+          pathlib.Path('package-lock.json').write_bytes(raw)
+          print(hashlib.sha256(raw).hexdigest(), len(raw))
+          PY
+          actual=$(sha256sum package-lock.json | awk '{print $1}')
+          echo "expected=$expected"
+          echo "actual=$actual"
+          test "$actual" = "$expected"
+          rm -rf .lock-b64 .lock-parts
           rm -f .github/workflows/assemble-package-lock.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git add -u .lock-parts .github/workflows/assemble-package-lock.yml
-          git commit -m "Add package-lock.json (exact workspace bytes)"
+          git add -A
+          git commit -m "Add exact package-lock.json from assembled parts"
           git push
